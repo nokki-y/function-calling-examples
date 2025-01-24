@@ -1,0 +1,19 @@
+{
+	"name": "function-calling-examples",
+	"version": "1.0.0",
+	"type": "module",
+	"scripts": {
+		"sample": "tsx"
+	},
+	"author": "nokki-y",
+	"license": "MIT",
+	"description": "『AIエージェントの内部処理を理解するために - Function Callingを正しく理解する -』というブログ記事で使用するサンプルコード集。",
+	"devDependencies": {
+		"tsx": "^4.19.2"
+	},
+	"dependencies": {
+		"@anthropic-ai/sdk": "^0.36.2",
+		"dotenv": "^16.4.7",
+		"openai": "^4.80.0"
+	}
+}

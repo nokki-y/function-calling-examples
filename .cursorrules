@@ -1,0 +1,16 @@
+# Cursor Rules
+
+このプロジェクトは、『AIエージェントの内部処理を理解するために - Function Callingを正しく理解する -』というブログ記事で使用するサンプルコードです。
+ブログ内では、AnthropicのAPIを使用してFunction Callingの解説を行っています。
+
+## 技術スタック
+- Node.js: v22.13.1
+- TypeScript
+
+## ディレクトリ構成
+.
+├── anthropic // AnthropicのAPIを使用したサンプルコード
+├── openai // OpenAIのAPIを使用したサンプルコード
+
+## 注意事項
+- @anthropic-ai/sdkと@openai/sdkの実行時に表示される`punycode`モジュールの非推奨警告は、現時点では無視して問題ありません。これはSDKの依存関係の問題で、将来的にSDKのアップデートで解決される予定です。
