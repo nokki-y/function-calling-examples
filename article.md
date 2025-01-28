@@ -6,7 +6,7 @@
 
 ## 1. はじめに
 
-最近、様々なAIエージェントが登場し話題になっていますが、その中核を担う技術の一つが「Function Calling」です。
+最近、様々なAIエージェントが登場し話題になっていますが、その中核を担う技術の一つが『Function Calling』です。
 
 本記事では、AIエージェントの内部動作、特にAnthropicのFunction Calling（Tool Use）に焦点を当て、その仕組みと実装方法について解説します。
 
@@ -16,7 +16,9 @@
 
 ### Function Callingの重要性
 
-Function Callingは、AIモデルが外部の関数やAPIを呼び出すための機能です。これにより、AIは：
+Function Callingは、AIモデルが外部の関数やAPIを呼び出すための機能です。
+
+**これにより、AIは：**
 
 - テキスト生成以外の具体的なアクション実行
 - 外部システムとの連携
@@ -26,7 +28,7 @@ Function Callingは、AIモデルが外部の関数やAPIを呼び出すため�
 
 ### 本記事の目的
 
-この記事では、以下の内容を目指します：
+**この記事では、以下の内容を目指します：**
 
 - Function Callingの基本概念の理解
 - AnthropicのFunction Calling実装方法の習得
@@ -34,16 +36,6 @@ Function Callingは、AIモデルが外部の関数やAPIを呼び出すため�
 
 
 ## 2. Function Callingの基礎
-
-### Function Callingとは何か
-
-Function Callingは、AIモデルが外部の関数を呼び出すための仕組みです。これにより、AIは：
-
-- 外部APIとの連携
-- データベースの操作
-- ファイル操作
-
-などの具体的なアクションを実行できます。
 
 ### AnthropicとOpenAIのFunction Calling比較
 
@@ -60,6 +52,21 @@ Function Callingは、AIモデルが外部の関数を呼び出すための仕�
 
 ### APIの基本的な使い方
 
+AnthropicのAPIを使用するための基本的な手順を説明します。
+
+1. **クライアントの初期化**：
+   - SDKをインポートし、API keyを使用してクライアントを初期化します
+     - 今回はAPI keyを環境変数から読み込みます
+
+2. **メッセージの作成**：
+   - `messages.create()`メソッドを使用して、AIとの対話を開始します
+   - 必須パラメータ：
+     - `model`: 使用するAIモデル（例：claude-3-5-sonnet）
+     - `messages`: ユーザーからの入力メッセージ
+   - オプションパラメータ：
+     - `max_tokens`: 生成するトークンの最大数
+     - `tools`: Function Calling用のツール定義
+
 ```typescript
 import Anthropic from "@anthropic-ai/sdk";
 
@@ -67,7 +74,7 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
-async function main() {
+async function sample() {
   const message = await anthropic.messages.create({
     model: "claude-3-5-sonnet-20241022",
     max_tokens: 1000,
@@ -86,47 +93,78 @@ async function main() {
 
 基本的なFunction Callingの実装パターンです。単一のツールを定義し、それを使用するシンプルな例です。
 
+- サンプルコード: [anthropic/1_basic.ts](https://github.com/nokki-y/function-calling-examples/blob/main/anthropic/1_basic.ts)
+
 ```typescript
-const tools = [{
-  name: "get_weather",
-  description: "指定された場所の天気情報を取得します",
-  input_schema: {
-    type: "object",
+async function basicToolUse() {
+ const tools = [
+  {
+   name: "get_weather",
+   description: "指定された場所の天気情報を取得します",
+   input_schema: {
+    type: "object" as const,
     properties: {
-      location: {
-        type: "string",
-        description: "場所（例：東京）",
-      },
+     location: {
+      type: "string" as const,
+      description: "場所（例：東京）",
+     },
     },
     required: ["location"],
+   },
   },
-}];
+ ];
 
-const message = await anthropic.messages.create({
+ console.log("モデルに問い合わせ...");
+ const message = await anthropic.messages.create({
   model: "claude-3-5-sonnet-20241022",
   max_tokens: 1000,
-  messages: [{
+  messages: [
+   {
     role: "user",
     content: "東京の天気は？",
-  }],
+   },
+  ],
   tools,
-});
+ });
+ console.log("Response:", JSON.stringify(message, null, 2));
+
+ // ツールの実行
+ if (message.stop_reason === "tool_use") {
+  const toolContent = message.content[message.content.length - 1];
+  if (toolContent.type === "tool_use") {
+   try {
+    const toolArgs = toolContent.input as WeatherInput;
+
+    console.log(
+     `ツール実行..天気を取得...引数: ${JSON.stringify(toolArgs)}`,
+    );
+    const weatherResult = await getWeather(toolArgs);
+    console.log("Weather Result:", JSON.stringify(weatherResult, null, 2));
+   } catch (error) {
+    console.error("Weather API Error:", error);
+   }
+  }
+ }
+}
 ```
 
 #### 実行結果
 
-ツールを使用する例：
-
-```json
-{
-  "id": "msg_0192ps4qaRwKUnjANt24TFH5",
+```sh
+モデルに問い合わせ...
+Response: {
+  "id": "msg_014gihSh5SPEqxd3k2HGN6PT",
   "type": "message",
   "role": "assistant",
   "model": "claude-3-5-sonnet-20241022",
   "content": [
     {
+      "type": "text",
+      "text": "東京の天気情報を確認させていただきます。"
+    },
+    {
       "type": "tool_use",
-      "id": "toolu_01ELne45XoiWhqw2sPEVLb41",
+      "id": "toolu_019b2yqYhic2AvBFiHJ2wmX7",
       "name": "get_weather",
       "input": {
         "location": "東京"
@@ -135,14 +173,15 @@ const message = await anthropic.messages.create({
   ],
   "stop_reason": "tool_use",
   "stop_sequence": null,
-  "usage": {
-    "input_tokens": 339,
-    "output_tokens": 54
-  }
+  "usage": // 省略
+}
+ツール実行..天気を取得...引数: {"location":"東京"}
+Weather Result: {
+  "weather": "晴れ"
 }
 ```
 
-ツールを使用しない例：
+**ツールを使用しない場合はこうなります：**
 
 ```typescript
 const message = await anthropic.messages.create({
@@ -157,8 +196,8 @@ const message = await anthropic.messages.create({
 ```
 
 ```json
-{
-  "id": "msg_01BhJc6d3KadX9ezw58EjUMH",
+Response: {
+  "id": "msg_01BRCx8U5epMJ7ca7jmzmWE1",
   "type": "message",
   "role": "assistant",
   "model": "claude-3-5-sonnet-20241022",
@@ -170,14 +209,11 @@ const message = await anthropic.messages.create({
   ],
   "stop_reason": "end_turn",
   "stop_sequence": null,
-  "usage": {
-    "input_tokens": 339,
-    "output_tokens": 89
-  }
+  "usage": // 省略
 }
 ```
 
-この基本パターンの実行結果から、以下のことが分かります：
+**この基本パターンの実行結果から、以下のことが分かります：**
 
 - AIモデルは質問の内容に応じて、ツールの使用が必要かどうかを判断します
 - ツールを使用する場合：
@@ -187,71 +223,178 @@ const message = await anthropic.messages.create({
 - ツールを使用しない場合：
   - 必要な情報が不足している場合は、ユーザーに追加情報を求めます
   - `stop_reason: "end_turn"`は、AIモデルが会話を継続することを示しています
-  - `type: "text"`で直接テキストを返却しています
 
 ### 2. シーケンシャル実行パターン
 
 複数のツールを順番に実行するパターンです。前のツールの結果を次のツールの入力として使用します。
 
+- サンプルコード: [anthropic/2_sequential.ts](https://github.com/nokki-y/function-calling-examples/blob/main/anthropic/2_sequential.ts)
+
 ```typescript
-const tools = [{
-  name: "get_location",
-  description: "ユーザーの現在位置を取得",
-  input_schema: {
-    type: "object",
+async function sequentialToolUse() {
+ const tools = [
+  {
+   name: "get_location",
+   description: "ユーザーの現在位置を取得します",
+   input_schema: {
+    type: "object" as const,
     properties: {},
+    required: [],
+   },
   },
-}, {
-  name: "get_weather",
-  description: "指定された場所の天気情報を取得",
-  input_schema: {
-    type: "object",
+  {
+   name: "get_weather",
+   description: "指定された場所の天気情報を取得します",
+   input_schema: {
+    type: "object" as const,
     properties: {
-      location: {
-        type: "string",
-        description: "場所",
-      },
+     location: {
+      type: "string" as const,
+      description: "場所（例：東京）",
+     },
     },
     required: ["location"],
+   },
   },
-}];
+ ];
 
-// ツール実行の連鎖
-const location = await executeGetLocation();
-const weather = await executeGetWeather(location);
+ console.log("モデルに問い合わせ...");
+ const locationResponse = await anthropic.messages.create({
+  model: "claude-3-5-sonnet-20241022",
+  max_tokens: 1000,
+  messages: [
+   {
+    role: "user",
+    content: "現在地の天気を教えて",
+   },
+  ],
+  tools,
+ });
+ console.log("Location Response:", JSON.stringify(locationResponse, null, 2));
+
+ // 位置情報を使って天気を取得
+ if (locationResponse.stop_reason === "tool_use") {
+  const locationContent =
+   locationResponse.content[locationResponse.content.length - 1];
+  if (locationContent.type === "tool_use") {
+   try {
+    console.log("ツール実行..位置情報を取得...");
+    const locationResult = await getLocation();
+    console.log(
+     "Location Result:",
+     JSON.stringify(locationResult, null, 2),
+    );
+
+    console.log("モデルに問い合わせ...(最終応答)");
+    const weatherResponse = await anthropic.messages.create({
+     model: "claude-3-5-sonnet-20241022",
+     max_tokens: 1000,
+     messages: [
+      {
+       role: "user",
+       content: "現在地の天気を教えて",
+      },
+      {
+       role: "assistant",
+       content: JSON.stringify(locationContent),
+      },
+      {
+       role: "user",
+       content: JSON.stringify(locationResult),
+      },
+     ],
+     tools,
+    });
+    console.log(
+     "Weather Response:",
+     JSON.stringify(weatherResponse, null, 2),
+    );
+
+    // 天気情報の取得
+    if (weatherResponse.stop_reason === "tool_use") {
+     const weatherContent =
+      weatherResponse.content[weatherResponse.content.length - 1];
+     if (weatherContent.type === "tool_use") {
+      const toolArgs = weatherContent.input as WeatherInput;
+
+      console.log(
+       `ツール実行..天気を取得...引数: ${JSON.stringify(toolArgs)}`,
+      );
+      const weatherResult = await getWeather(toolArgs);
+      console.log(
+       "Weather Result:",
+       JSON.stringify(weatherResult, null, 2),
+      );
+     }
+    }
+   } catch (error) {
+    console.error("Error:", error);
+   }
+  }
+ }
+}
 ```
 
 #### 実行結果
 
-```json
-{
-  "id": "msg_01LNGy7BpJHfzNeBiaxBi27y",
+```sh
+モデルに問い合わせ...
+Location Response: {
+  "id": "msg_01B7Kt1xVYUrzeoj2AUGritR",
   "type": "message",
   "role": "assistant",
   "model": "claude-3-5-sonnet-20241022",
   "content": [
     {
       "type": "text",
-      "text": "はい、わかりました。あなたの地域の天気情報を取得するために、以下のように天気取得ツールを呼び出します。"
+      "text": "現在地の天気を調べるために、まず位置情報を取得してから天気情報を確認します。"
     },
     {
       "type": "tool_use",
-      "id": "toolu_01N8nwhoMe9zu9JxAUV8Wdv5",
+      "id": "toolu_01PXQdfmJZEfUv2gA9wsPsbz",
+      "name": "get_location",
+      "input": {}
+    }
+  ],
+  "stop_reason": "tool_use",
+  "stop_sequence": null,
+  "usage": // 省略
+}
+ツール実行..位置情報を取得...
+Location Result: {
+  "location": "札幌"
+}
+モデルに問い合わせ...(2回目)
+Weather Response: {
+  "id": "msg_01H1BkTmQhThq3JoKQBy1d7v",
+  "type": "message",
+  "role": "assistant",
+  "model": "claude-3-5-sonnet-20241022",
+  "content": [
+    {
+      "type": "text",
+      "text": "では、札幌の天気を確認してみましょう。"
+    },
+    {
+      "type": "tool_use",
+      "id": "toolu_01VewiXnpkpr3AfBYxuPKecU",
       "name": "get_weather",
       "input": {
-        "location": "東京"
+        "location": "札幌"
       }
     }
   ],
   "stop_reason": "tool_use",
-  "usage": {
-    "input_tokens": 415,
-    "output_tokens": 98
-  }
+  "stop_sequence": null,
+  "usage": // 省略
+}
+ツール実行..天気を取得...引数: {"location":"札幌"}
+Weather Result: {
+  "weather": "雪"
 }
 ```
 
-シーケンシャル実行パターンの実行結果から、以下のことが分かります：
+**シーケンシャル実行パターンの実行結果から、以下のことが分かります：**
 
 - AIモデルは最初に説明文（text）を生成し、その後ツールを呼び出しています
 - 複数のツールが定義されていても、必要なツールのみを選択して実行しています
@@ -261,39 +404,111 @@ const weather = await executeGetWeather(location);
 
 スキーマベースの型定義と検証機能を持つJSONデータの生成に特化したパターンです。
 
+- サンプルコード: [anthropic/3_json.ts](https://github.com/nokki-y/function-calling-examples/blob/main/anthropic/3_json.ts)
+
 ```typescript
-const tools = [{
-  name: "format_user_data",
-  description: "ユーザーデータをJSON形式に整形",
-  input_schema: {
-    type: "object",
+async function jsonToolUse() {
+ const tools = [
+  {
+   name: "format_user_data",
+   description: "ユーザーデータをJSON形式に整形します",
+   input_schema: {
+    type: "object" as const,
     properties: {
-      name: {
-        type: "string",
-        description: "ユーザー名",
-      },
-      age: {
-        type: "number",
-        description: "年齢",
-      },
+     name: {
+      type: "string" as const,
+      description: "ユーザー名",
+     },
+     age: {
+      type: "number" as const,
+      description: "年齢",
+     },
+     email: {
+      type: "string" as const,
+      description: "メールアドレス",
+     },
     },
     required: ["name", "age"],
+   },
   },
-}];
+ ];
+
+ console.log("モデルに問い合わせ...");
+ const message = await anthropic.messages.create({
+  model: "claude-3-5-sonnet-20241022",
+  max_tokens: 1000,
+  messages: [
+   {
+    role: "user",
+    content: "ユーザー情報を整形して：山田太郎、30歳、yamada@example.com",
+   },
+  ],
+  tools,
+ });
+ console.log("Response:", JSON.stringify(message, null, 2));
+
+ // ツールの実行
+ if (message.stop_reason === "tool_use") {
+  const toolContent = message.content[message.content.length - 1];
+  if (toolContent.type === "tool_use") {
+   try {
+    const toolArgs = toolContent.input as UserData;
+    console.log(
+     `ツール実行..ユーザーデータを整形...引数: ${JSON.stringify(toolArgs)}`,
+    );
+    const formattedData = formatUserData(toolArgs);
+    console.log("Formatted Data:", JSON.stringify(formattedData, null, 2));
+
+    // フォーマット結果を使って最終的な応答を生成
+    console.log("モデルに問い合わせ...(最終応答)");
+    const finalResponse = await anthropic.messages.create({
+     model: "claude-3-5-sonnet-20241022",
+     max_tokens: 1000,
+     messages: [
+      {
+       role: "user",
+       content:
+        "ユーザー情報を整形して：山田太郎、30歳、yamada@example.com",
+      },
+      {
+       role: "assistant",
+       content: JSON.stringify(toolContent),
+      },
+      {
+       role: "user",
+       content: JSON.stringify(formattedData),
+      },
+     ],
+    });
+
+    console.log("Final Response:", JSON.stringify(finalResponse, null, 2));
+   } catch (error) {
+    console.error("Format Error:", error);
+   }
+  }
+ }
+}
 ```
 
 #### 実行結果
 
 ```json
-{
-  "id": "msg_01W32aoSJYoPYDYaini5bsnq",
+モデルに問い合わせ...
+(node:29509) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+Response: {
+  "id": "msg_01S8FiGQHjLBWDEUCogwEqTQ",
   "type": "message",
   "role": "assistant",
   "model": "claude-3-5-sonnet-20241022",
   "content": [
     {
+      "type": "text",
+      "text": "ユーザー情報を整形するために、format_user_dataファンクションを使用します。提供された情報は以下の通りです：\n- 名前: 山田太郎\n- 年齢: 30\n- メールアドレス: yamada@example.com\n\nこれらの情報を使用してフォーマットします："
+    },
+    {
       "type": "tool_use",
-      "id": "toolu_014Gi98iAmernhxnEkhQvV6c",
+      "id": "toolu_0138bv26hSgBXEL14Z2X1TJg",
       "name": "format_user_data",
       "input": {
         "name": "山田太郎",
@@ -303,371 +518,58 @@ const tools = [{
     }
   ],
   "stop_reason": "tool_use",
-  "usage": {
-    "input_tokens": 414,
-    "output_tokens": 98
-  }
+  "stop_sequence": null,
+  "usage": // 省略
+}
+ツール実行..ユーザーデータを整形...引数: {"name":"山田太郎","age":30,"email":"yamada@example.com"}
+Formatted Data: {
+  "name": "山田太郎",
+  "age": 30,
+  "email": "yamada@example.com"
+}
+モデルに問い合わせ...(最終応答)
+Final Response: {
+  "id": "msg_01WaS7WCSktdgLniESUrtT94",
+  "type": "message",
+  "role": "assistant",
+  "model": "claude-3-5-sonnet-20241022",
+  "content": [
+    {
+      "type": "text",
+      "text": "ユーザー情報を整形しました:\n\n氏名: 山田太郎\n年齢: 30歳\nメール: yamada@example.com"
+    }
+  ],
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "usage": // 省略
 }
 ```
 
-JSON特化パターンの実行結果から、以下のことが分かります：
+**JSON特化パターンの実行結果から、以下のことが分かります：**
 
 - 非構造化テキストから必要な情報を抽出し、構造化データとして整形しています
 - スキーマで定義された必須フィールド（name, age）に加え、オプショナルフィールド（email）も適切に処理しています
 - 各フィールドの型（文字列、数値）が正しく設定されています
 
-### 4. Chain of Thoughtパターン
 
-システムプロンプトを使用して思考プロセスを制御し、より適切なツール選択を行うパターンです。
+## 5. まとめ
 
-```typescript
-const message = await anthropic.messages.create({
-  model: "claude-3-5-sonnet-20241022",
-  max_tokens: 1000,
-  messages: [{
-    role: "user",
-    content: "天気を教えて",
-  }],
-  tools,
-  system: `
-    ツールを使用する前に、以下のステップで考えてください：
-    1. 必要な情報は何か
-    2. どのツールを使うべきか
-    3. パラメータは適切か
-  `,
-});
-```
+今回は、AIエージェントの内部動作を理解するための第一歩として、Function Callingの基本的な実装パターンを紹介しました。
 
-#### 実行結果
+AIエージェントは、ユーザーの指示に基づいて自律的にタスクを実行するAIシステムです。タスクを実行するためには、ユーザーの指示を理解し、それに応じて複数のツールを駆使し、アクションを実行する必要があります。
 
-```json
-{
-  "id": "msg_01LNGy7BpJHfzNeBiaxBi27y",
-  "type": "message",
-  "role": "assistant",
-  "model": "claude-3-5-sonnet-20241022",
-  "content": [
-    {
-      "type": "text",
-      "text": "はい、わかりました。あなたの地域の天気情報を取得するために、以下のように天気取得ツールを呼び出します。"
-    },
-    {
-      "type": "tool_use",
-      "id": "toolu_01N8nwhoMe9zu9JxAUV8Wdv5",
-      "name": "get_weather",
-      "input": {
-        "location": "東京"
-      }
-    }
-  ],
-  "stop_reason": "tool_use",
-  "usage": {
-    "input_tokens": 415,
-    "output_tokens": 98
-  }
-}
-```
+そのため、今回紹介した以下のパターンは、AIエージェントの実装において最も基本的なパターンになります。
 
-Chain of Thoughtパターンの実行結果から、以下のことが分かります：
-
-- システムプロンプトの指示に従って、AIモデルは思考プロセスを説明文として出力しています
-- 必要な情報（場所）が不足している場合でも、デフォルト値（東京）を使用して処理を進めています
-- ツールの選択理由が説明文に含まれており、判断プロセスが透明になっています
-
-### 5. エラーハンドリングパターン
-
-ツールの実行時のエラーを適切に処理し、フォールバックプロセスを実装するパターンです。
-
-```typescript
-try {
-  const result = await executeTool(toolName, params);
-  if (!result.success) {
-    // エラー時の代替処理
-    const fallbackResult = await executeFallbackTool();
-    return fallbackResult;
-  }
-  return result;
-} catch (error) {
-  console.error("ツール実行エラー:", error);
-  // ユーザーへのフィードバック
-  return {
-    error: true,
-    message: "ツールの実行に失敗しました",
-  };
-}
-```
-
-### 6. 並列実行制御パターン
-
-複数のツールを並列に実行する際の制御を行うパターンです。実行順序の制御やリソースの競合を防ぐための仕組みを実装します。
-
-```typescript
-const tools = [{
-  name: "get_data",
-  description: "データ取得（並列実行不可）",
-  input_schema: {
-    type: "object",
-    properties: {
-      id: {
-        type: "string",
-      },
-    },
-    required: ["id"],
-  },
-}];
-
-// 実行制御
-let isExecuting = false;
-async function executeWithControl(tool, params) {
-  if (isExecuting) {
-    throw new Error("別の処理が実行中です");
-  }
-  isExecuting = true;
-  try {
-    return await executeTool(tool, params);
-  } finally {
-    isExecuting = false;
-  }
-}
-```
-
-#### 実行結果
-
-```json
-{
-  "id": "msg_01BhJc6d3KadX9ezw58EjUMH",
-  "type": "message",
-  "role": "assistant",
-  "model": "claude-3-5-sonnet-20241022",
-  "content": [
-    {
-      "type": "text",
-      "text": "はい、わかりました。以下のようにget_dataツールを呼び出してデータを取得します。"
-    },
-    {
-      "type": "tool_use",
-      "id": "toolu_017Wv3nKDVzWoqu36L9PkaYp",
-      "name": "get_data",
-      "input": {
-        "id": "1"
-      }
-    }
-  ],
-  "stop_reason": "tool_use",
-  "usage": {
-    "input_tokens": 319,
-    "output_tokens": 85
-  }
-}
-```
-
-並列実行制御パターンの実行結果から、以下のことが分かります：
-
-- AIモデルは実行前に説明文を生成し、処理の意図を明確にしています
-- 並列実行可能な場合でも、リソースの競合を避けるため1つずつ実行されています
-- 各リクエストに一意のIDが割り当てられ、実行の追跡が可能になっています
-
-
-## 5. ベストプラクティス
-
-### 効果的なツール説明の書き方
-
-```typescript
-const tool = {
-  name: "get_weather",
-  description: `
-    指定された場所の現在の天気情報を取得します。
-    - 使用時期：ユーザーが特定の場所の天気を知りたい場合
-    - 返却データ：気温、天気、湿度
-    - 制限事項：過去の天気データは取得できません
-  `,
-  input_schema: {
-    // ...
-  },
-};
-```
-
-### パラメータ設計のコツ
-
-1. **必須パラメータの最小化**
-   - 本当に必要なパラメータのみrequiredに
-   - オプショナルパラメータの適切な初期値設定
-
-2. **明確な型定義**
-   - 曖昧な型定義を避ける
-   - 適切な制約の設定
-
-3. **わかりやすい説明**
-   - 各パラメータの役割を明確に
-   - 具体例の提示
-
-### エッジケースの処理
-
-1. **入力値の検証**
-   - 範囲チェック
-   - フォーマットチェック
-
-2. **エラー時の代替処理**
-   - フォールバックの用意
-   - グレースフルデグラデーション
-
-3. **タイムアウト処理**
-   - 適切なタイムアウト設定
-   - リトライ戦略
-
-
-## 6. まとめ
-
-### Function Callingの可能性
-
-Function Callingは、AIエージェントの能力を大きく拡張する技術です。本記事で紹介した実装パターンを活用することで：
-
-- より堅牢なAIシステムの構築
-- 複雑なタスクの自動化
-- 外部システムとの効果的な連携
-が可能になります。
+- シーケンシャル実行パターン: 複数ツールの順次実行
+- JSON特化パターン: ユーザーの指示から必要な情報を抽出し、構造化データとして整形
 
 ### 今後の展望
 
-1. **さらなる機能拡張**
-   - より柔軟なツール定義
-   - 高度な実行制御
+その他のパターンが気になる方は、[こちらの公式ドキュメント](https://docs.anthropic.com/en/docs/build-with-claude/tool-use)をご覧ください。
 
-2. **新しいユースケース**
-   - ビジネスプロセスの自動化
-   - 高度な意思決定支援
+**今後の記事では、以下のような内容を予定しています：**
 
-3. **標準化の進展**
-   - 共通インターフェースの確立
-   - ベストプラクティスの確立
+- AIエージェントの実装例と実践的なユースケース
+- Cursorの内部処理の解説
 
-Function Callingは、AIエージェントの重要な構成要素として、今後さらなる発展が期待されます。本記事で紹介した実装パターンを参考に、より良いAIシステムの構築にチャレンジしてください。
-
-
-## 7. 実装パターンの応用例
-
-### 複数パターンの組み合わせ
-
-実際のアプリケーションでは、複数のパターンを組み合わせて使用することが一般的です。
-
-```typescript
-// Chain of Thoughtとエラーハンドリングの組み合わせ
-const message = await anthropic.messages.create({
-  model: "claude-3-5-sonnet-20241022",
-  max_tokens: 1000,
-  messages: [{
-    role: "user",
-    content: "天気を教えて",
-  }],
-  tools,
-  system: `
-    ツールを使用する前に、以下のステップで考えてください：
-    1. 必要な情報は何か
-    2. どのツールを使うべきか
-    3. パラメータは適切か
-    4. エラーが発生した場合の代替案は？
-  `,
-});
-
-try {
-  const result = await executeTool(message);
-} catch (error) {
-  // フォールバック処理
-  const fallback = await handleError(error);
-}
-```
-
-### 実践的なユースケース
-
-1. **外部APIとの連携**
-
-   ```typescript
-   const tools = [{
-     name: "call_external_api",
-     description: "外部APIを呼び出します",
-     input_schema: {
-       type: "object",
-       properties: {
-         endpoint: { type: "string" },
-         method: { type: "string" },
-         params: { type: "object" },
-       },
-       required: ["endpoint"],
-     },
-   }];
-   ```
-
-2. **データベース操作**
-
-   ```typescript
-   const tools = [{
-     name: "query_database",
-     description: "データベースに対してクエリを実行します",
-     input_schema: {
-       type: "object",
-       properties: {
-         query: { type: "string" },
-         params: { type: "array" },
-       },
-       required: ["query"],
-     },
-   }];
-   ```
-
-3. **ファイル操作**
-
-   ```typescript
-   const tools = [{
-     name: "file_operation",
-     description: "ファイルの読み書きを行います",
-     input_schema: {
-       type: "object",
-       properties: {
-         path: { type: "string" },
-         operation: { type: "string" },
-         content: { type: "string" },
-       },
-       required: ["path", "operation"],
-     },
-   }];
-   ```
-
-### パフォーマンス最適化
-
-1. **キャッシュの活用**
-
-   ```typescript
-   const cache = new Map();
-   
-   async function executeWithCache(tool, params) {
-     const cacheKey = `${tool.name}-${JSON.stringify(params)}`;
-     if (cache.has(cacheKey)) {
-       return cache.get(cacheKey);
-     }
-     
-     const result = await executeTool(tool, params);
-     cache.set(cacheKey, result);
-     return result;
-   }
-   ```
-
-2. **バッチ処理**
-
-   ```typescript
-   async function executeBatch(tools, paramsList) {
-     const batchSize = 5;
-     const results = [];
-     
-     for (let i = 0; i < paramsList.length; i += batchSize) {
-       const batch = paramsList.slice(i, i + batchSize);
-       const batchResults = await Promise.all(
-         batch.map(params => executeTool(tools[0], params))
-       );
-       results.push(...batchResults);
-     }
-     
-     return results;
-   }
-   ```
-
-これらの応用例は、実際のプロジェクトでFunction Callingを効果的に活用するためのベースとなります。状況に応じて適切なパターンを選択し、必要に応じて組み合わせることで、より堅牢なAIシステムを構築できます。
+これらの基本パターンを応用することで、より複雑なAIエージェントの実装も可能になります。興味のある方はぜひ次回以降の記事もご覧ください。

@@ -15,8 +15,13 @@
 .
 ├── anthropic // AnthropicのAPIを使用したサンプルコード
 ├── openai // OpenAIのAPIを使用したサンプルコード
+├── functions // Function Callingのツールが格納されているディレクトリ
 ├── article.md // ブログ記事のmarkdownファイル
 └── README.md // プロジェクトの説明
+
+## サンプルコード内で使用するModel
+- claude-3-5-sonnet-20241022
+- gpt-4o-mini
 
 ## 注意事項
 - @anthropic-ai/sdkと@openai/sdkの実行時に表示される`punycode`モジュールの非推奨警告は、現時点では無視して問題ありません。これはSDKの依存関係の問題で、将来的にSDKのアップデートで解決される予定です。

@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import dotenv from "dotenv";
+import { type WeatherInput, getWeather } from "../functions/get_weather";
 
 dotenv.config();
 
@@ -26,6 +27,7 @@ async function basicToolUse() {
 		},
 	];
 
+	console.log("モデルに問い合わせ...");
 	const message = await anthropic.messages.create({
 		model: "claude-3-5-sonnet-20241022",
 		max_tokens: 1000,
@@ -37,8 +39,25 @@ async function basicToolUse() {
 		],
 		tools,
 	});
-
 	console.log("Response:", JSON.stringify(message, null, 2));
+
+	// ツールの実行
+	if (message.stop_reason === "tool_use") {
+		const toolContent = message.content[message.content.length - 1];
+		if (toolContent.type === "tool_use") {
+			try {
+				const toolArgs = toolContent.input as WeatherInput;
+
+				console.log(
+					`ツール実行..天気を取得...引数: ${JSON.stringify(toolArgs)}`,
+				);
+				const weatherResult = await getWeather(toolArgs);
+				console.log("Weather Result:", JSON.stringify(weatherResult, null, 2));
+			} catch (error) {
+				console.error("Weather API Error:", error);
+			}
+		}
+	}
 }
 
 basicToolUse().catch(console.error);

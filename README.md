@@ -49,6 +49,15 @@ cp .env.example .env
 ```
 
 
+## 実行方法
+
+`npm run sample [ファイル名]`でサンプルコードを実行できます。
+
+```bash
+npm run sample anthropic/1_basic.ts
+```
+
+
 ## 注意事項
 
 - @anthropic-ai/sdkと@openai/sdkの実行時に表示される`punycode`モジュールの非推奨警告は、現時点では無視して問題ありません。これはSDKの依存関係の問題で、将来的にSDKのアップデートで解決される予定です。
